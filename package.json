@@ -1,0 +1,40 @@
+{
+  "name": "@toesbieya/vue-zh-i18n-check",
+  "version": "1.0.0",
+  "description": "Vue3 中文项目国际化检测工具：硬编码中文检测、语言包 key 完整性检测、重复 key 检测",
+  "type": "module",
+  "bin": {
+    "vue-zh-i18n-check": "src/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "build": "npm run test",
+    "pack": "npm run build && node -e \"require('node:fs').mkdirSync('dist', { recursive: true })\" && npm pack --pack-destination dist"
+  },
+  "dependencies": {
+    "ignore": "^5.3.2"
+  },
+  "peerDependencies": {
+    "@vue/compiler-dom": ">=3",
+    "@vue/compiler-sfc": ">=3",
+    "typescript": ">=5"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@vue/compiler-dom": "^3.5.45",
+    "@vue/compiler-sfc": "^3.5.45",
+    "typescript": "^5.9.3"
+  }
+}

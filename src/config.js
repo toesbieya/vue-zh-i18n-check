@@ -1,0 +1,48 @@
+/**
+ * 配置解析
+ * 合并默认配置、配置文件（由 CLI 加载后传入）与调用方覆盖项。
+ */
+
+/** 默认配置 */
+export const DEFAULT_CONFIG = {
+  /** 项目根目录，默认当前工作目录 */
+  root: process.cwd(),
+  /** 语言包根目录（相对项目根） */
+  langRoot: 'src/locale/lang',
+  /** 允许扫描的文件扩展名 */
+  extensions: ['.vue', '.js', '.ts', '.jsx', '.tsx', '.json', '.html'],
+  /** gitignore 语法的内联忽略模式（相对项目根） */
+  ignore: [],
+  /** 额外忽略文件路径（相对项目根，语法同 .gitignore），.gitignore 自动加载无需声明 */
+  ignoreFiles: [],
+  /** 检测报告输出目录（相对项目根） */
+  outputDir: '.i18n-check',
+  /** 硬编码中文检测配置 */
+  zh: {
+    /** 需屏蔽首个字符串参数的函数名（翻译函数本身即视为已国际化） */
+    ignoreFns: ['$t', 't', '$pure', '$i18nKey']
+  },
+  /** 语言包 key 完整性检测配置 */
+  lang: {
+    /** 翻译函数名 */
+    tFns: ['$t', 't', '$i18nKey'],
+    /** 需屏蔽首个字符串参数的函数名 */
+    ignoreFns: ['$pure']
+  }
+}
+
+/**
+ * 合并配置：默认值 < 配置文件 < 调用方覆盖项（zh / lang 分节各自浅合并）
+ * @param {object} [overrides] 覆盖项，字段同 DEFAULT_CONFIG
+ * @returns {typeof DEFAULT_CONFIG} 合并后的配置
+ */
+export function resolveConfig(overrides = {}) {
+  const config = {
+    ...DEFAULT_CONFIG,
+    ...overrides,
+    zh: { ...DEFAULT_CONFIG.zh, ...overrides.zh },
+    lang: { ...DEFAULT_CONFIG.lang, ...overrides.lang }
+  }
+  config.extensions = new Set(config.extensions)
+  return config
+}

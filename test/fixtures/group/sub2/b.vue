@@ -1,0 +1,1 @@
+<template><div>世界</div></template>
