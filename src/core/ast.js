@@ -4,7 +4,8 @@
  * 统一产出两类结果：
  * - candidates：需要检测硬编码中文的文本（字符串字面量、模板文本等），已排除
  *   注释、console.* 调用、ignoreFns 首个字符串参数、throw Error 参数与 TS 类型位置；
- * - calls：tFns 翻译函数调用（含 .vue 模板表达式），区分字面量 key 与动态参数。
+ * - calls：tFns 翻译函数调用（含 .vue 模板表达式与 i18n 组件的 key 属性），
+ *   区分字面量 key 与动态参数。
  * .json / .html 文件与 .vue style 块不产出 AST 结果，由 raw-mask 管线处理。
  */
 
@@ -35,7 +36,7 @@ export function isAstFile(filePath) {
  * 从源文件提取文本候选与翻译函数调用
  * @param {string} filePath 文件绝对路径
  * @param {string} content 文件内容
- * @param {{ ignoreFns: string[], tFns: string[] }} options 提取配置
+ * @param {{ ignoreFns: string[], tFns: string[], i18nComponents?: Array<{ tag: string, keyProp: string }> }} options 提取配置
  * @returns {ExtractResult} 提取结果；解析失败时返回空结果
  */
 export function extractFromFile(filePath, content, options) {
@@ -43,6 +44,7 @@ export function extractFromFile(filePath, content, options) {
   const ctx = {
     ignoreFns: new Set(options.ignoreFns),
     tFns: new Set(options.tFns),
+    i18nComponents: (options.i18nComponents ?? []).map(normalizeI18nComponent),
     out: { candidates: [], calls: [], rawSegments: [] }
   }
 
@@ -120,7 +122,7 @@ function extractFromVue(content, filePath, ctx) {
  * 递归遍历模板 AST
  * @param {object} node 模板 AST 节点
  * @param {number} baseLine 模板内容首字符在文件内的行号（1 起始）
- * @param {{ out: ExtractResult }} ctx 提取上下文
+ * @param {{ i18nComponents: Array<{ tag: string, keyProp: string }>, out: ExtractResult }} ctx 提取上下文
  */
 function walkTemplate(node, baseLine, ctx) {
   if (!node || typeof node !== 'object') return
@@ -145,6 +147,15 @@ function walkTemplate(node, baseLine, ctx) {
       walkTemplate(node.exp, baseLine, ctx)
       walkTemplate(node.arg, baseLine, ctx)
       return
+    case NodeTypes.ELEMENT: {
+      // i18n 组件（如 i18n-t）的 key 属性是翻译 key 而非硬编码文本，需特殊处理
+      const i18nComponent = matchI18nComponent(node, ctx)
+      if (i18nComponent) {
+        walkI18nComponentElement(node, i18nComponent, baseLine, ctx)
+        return
+      }
+      break
+    }
   }
 
   for (const key of ['children', 'props', 'branches', 'source', 'content', 'value', 'exp']) {
@@ -155,6 +166,108 @@ function walkTemplate(node, baseLine, ctx) {
     }
     walkTemplate(child, baseLine, ctx)
   }
+}
+
+/** 动态绑定指令名（:keypath 解析后的 name） */
+const BIND_DIRECTIVE = 'bind'
+
+/**
+ * 归一化 i18n 组件配置：标签名去连字符并转小写，匹配时 i18n-t / I18nT 等等价写法均可命中
+ * @param {{ tag: string, keyProp: string }} component 组件配置
+ * @returns {{ tag: string, keyProp: string }} 归一化后的组件配置（tag 为归一化标签名）
+ */
+function normalizeI18nComponent(component) {
+  return { tag: component.tag.toLowerCase().replaceAll('-', ''), keyProp: component.keyProp }
+}
+
+/**
+ * 匹配节点是否为配置的 i18n 组件
+ * @param {object} node 模板 AST 节点
+ * @param {{ i18nComponents: Array<{ tag: string, keyProp: string }> }} ctx 提取上下文
+ * @returns {{ tag: string, keyProp: string } | undefined} 匹配到的组件配置
+ */
+function matchI18nComponent(node, ctx) {
+  if (ctx.i18nComponents.length === 0) return undefined
+  const tag = node.tag.toLowerCase().replaceAll('-', '')
+  return ctx.i18nComponents.find(component => component.tag === tag)
+}
+
+/**
+ * 遍历 i18n 组件：key 属性记录为翻译调用（不进入硬编码中文检测），
+ * 其余属性与子节点照常遍历
+ * @param {object} node i18n 组件元素节点
+ * @param {{ tag: string, keyProp: string }} component 匹配到的组件配置
+ * @param {number} baseLine 模板内容首字符在文件内的行号（1 起始）
+ * @param {{ out: ExtractResult }} ctx 提取上下文
+ */
+function walkI18nComponentElement(node, component, baseLine, ctx) {
+  for (const prop of node.props) {
+    if (isKeyProp(prop, component.keyProp)) {
+      recordKeyPropCall(prop, component, baseLine, ctx.out)
+      continue
+    }
+    walkTemplate(prop, baseLine, ctx)
+  }
+  for (const child of node.children) {
+    walkTemplate(child, baseLine, ctx)
+  }
+}
+
+/**
+ * 判断元素属性是否为翻译 key 属性（静态 key="..." 或动态 :key="..."）
+ * @param {object} prop 元素属性节点
+ * @param {string} keyProp 翻译 key 属性名
+ * @returns {boolean} 是否为翻译 key 属性
+ */
+function isKeyProp(prop, keyProp) {
+  if (prop.type === NodeTypes.ATTRIBUTE) return prop.name === keyProp
+  if (prop.type === NodeTypes.DIRECTIVE) {
+    return prop.name === BIND_DIRECTIVE
+      && prop.arg?.type === NodeTypes.SIMPLE_EXPRESSION
+      && prop.arg.content === keyProp
+  }
+  return false
+}
+
+/**
+ * 记录 key 属性为翻译调用：静态值与字符串字面量按字面量 key 处理，其余按动态参数处理
+ * @param {object} prop key 属性节点
+ * @param {{ tag: string, keyProp: string }} component 匹配到的组件配置
+ * @param {number} baseLine 模板内容首字符在文件内的行号（1 起始）
+ * @param {ExtractResult} out 提取结果
+ */
+function recordKeyPropCall(prop, component, baseLine, out) {
+  if (prop.type === NodeTypes.ATTRIBUTE) {
+    if (!prop.value) return
+    out.calls.push({
+      name: component.tag,
+      line: baseLine + prop.value.loc.start.line - 1,
+      firstArg: { kind: 'literal', value: prop.value.content }
+    })
+    return
+  }
+  if (!prop.exp) return
+  const line = baseLine + prop.exp.loc.start.line - 1
+  const literal = parseStringLiteral(prop.exp.content)
+  if (literal != null) {
+    out.calls.push({ name: component.tag, line, firstArg: { kind: 'literal', value: literal } })
+    return
+  }
+  out.calls.push({ name: component.tag, line, firstArg: { kind: 'dynamic', raw: prop.exp.content.trim() } })
+}
+
+/**
+ * 尝试将表达式源码解析为字符串字面量
+ * @param {string} code 表达式源码
+ * @returns {string | null} 字符串字面量的值，非字符串字面量返回 null
+ */
+function parseStringLiteral(code) {
+  const sourceFile = ts.createSourceFile('inline', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const statement = sourceFile.statements[0]
+  if (!statement || !ts.isExpressionStatement(statement)) return null
+  const expr = statement.expression
+  if (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) return expr.text
+  return null
 }
 
 /** 中文检测正则 */

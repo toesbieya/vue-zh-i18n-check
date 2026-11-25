@@ -130,7 +130,8 @@ export function zhCheck(scanTargets, options = {}) {
     if (isAstFile(file)) {
       const { candidates, rawSegments } = extractFromFile(file, content, {
         ignoreFns: config.zh.ignoreFns,
-        tFns: []
+        tFns: [],
+        i18nComponents: config.i18nComponents
       })
       // 同一物理行的多个候选（如模板字符串头尾段）合并为一行报告
       const runsByLine = new Map()

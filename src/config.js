@@ -17,6 +17,11 @@ export const DEFAULT_CONFIG = {
   ignoreFiles: [],
   /** 检测报告输出目录（相对项目根） */
   outputDir: '.i18n-check',
+  /**
+   * 模板中携带翻译 key 的组件（key 属性值按翻译 key 处理，不算硬编码中文，且计入已使用 key）
+   * tag 匹配忽略大小写与连字符（i18n-t / I18nT 等价）；数组为整体覆盖，自定义时需保留默认项
+   */
+  i18nComponents: [{ tag: 'i18n-t', keyProp: 'keypath' }],
   /** 硬编码中文检测配置 */
   zh: {
     /** 需屏蔽首个字符串参数的函数名（翻译函数本身即视为已国际化） */

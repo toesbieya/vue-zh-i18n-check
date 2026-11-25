@@ -141,7 +141,7 @@ function detectMissingKeys(languageData, allKeys, languages, missingFiles) {
  * 扫描源码中的翻译函数调用
  * @param {string[]} files 待扫描的源文件绝对路径列表
  * @param {Set<string>} allKeys 总 key 集合
- * @param {{ root: string, tFns: string[], ignoreFns: string[] }} options 扫描配置
+ * @param {{ root: string, tFns: string[], ignoreFns: string[], i18nComponents: Array<{ tag: string, keyProp: string }> }} options 扫描配置
  * @returns {{ missingKeys: Array<{ file: string, line: number, key: string }>, dynamicCalls: Array<{ file: string, line: number, raw: string }>, usedKeys: Set<string>, scannedFiles: number }} 扫描结果
  */
 function scanSourceFiles(files, allKeys, options) {
@@ -154,7 +154,8 @@ function scanSourceFiles(files, allKeys, options) {
     const content = fs.readFileSync(file, 'utf-8')
     const { calls } = extractFromFile(file, content, {
       ignoreFns: options.ignoreFns,
-      tFns: options.tFns
+      tFns: options.tFns,
+      i18nComponents: options.i18nComponents
     })
     const relFile = toPosix(path.relative(options.root, file))
 
@@ -322,7 +323,8 @@ export function langKeyCheck(scanTargets, options = {}) {
   const sourceResults = scanSourceFiles(files, allKeys, {
     root: config.root,
     tFns: config.lang.tFns,
-    ignoreFns: config.lang.ignoreFns
+    ignoreFns: config.lang.ignoreFns,
+    i18nComponents: config.i18nComponents
   })
   const unusedKeys = detectUnusedKeys(allKeys, sourceResults.usedKeys)
 

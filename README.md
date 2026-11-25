@@ -56,6 +56,14 @@ export default {
   // 检测报告输出目录（相对项目根），默认 '.i18n-check'
   outputDir: '.i18n-check',
 
+  // 模板中携带翻译 key 的组件，默认 [{ tag: 'i18n-t', keyProp: 'keypath' }]
+  // key 属性值按翻译 key 处理：不算硬编码中文，且计入已使用 key
+  // tag 匹配忽略大小写与连字符（i18n-t / I18nT 等价）；数组为整体覆盖，自定义时需保留默认项
+  i18nComponents: [
+    { tag: 'i18n-t', keyProp: 'keypath' },
+    { tag: 'I18nText', keyProp: 'k' }
+  ],
+
   // zh-check 配置
   zh: {
     // 首个字符串参数视为已国际化（不参与硬编码中文检测）的函数名
@@ -90,6 +98,7 @@ checkAll('src')                                                   // lang + zh�
 
 - 各类注释（HTML 注释、JS 行/块注释、`.vue` 模板注释）；
 - `ignoreFns` 函数的首个字符串参数（默认含 `$t` / `t` / `$pure` / `$i18nKey`）；
+- `i18nComponents` 配置的组件 key 属性（默认 `<i18n-t keypath="...">`）；
 - `console.*(...)` 整个调用；
 - `%...%` 包裹的内容（如 `%page.首页%`）；
 - TS 类型位置的字符串字面量（如 `type Status = '在职' | '离职'`）；

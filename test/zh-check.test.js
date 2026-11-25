@@ -166,6 +166,31 @@ describe('zh-check: \\u 转义中文不误报', () => {
   })
 })
 
+describe('zh-check: i18n-t 组件 keypath 不误报', () => {
+  it('success=true（keypath 是翻译 key 而非硬编码文本）', () => {
+    const { success, report } = runZhCheck('i18n-t')
+    assert.strictEqual(success, true)
+    assert.ok(report.includes('未发现硬编码中文'))
+  })
+})
+
+describe('zh-check: 自定义 i18nComponents', () => {
+  it('默认配置下自定义组件 key 属性报硬编码中文', () => {
+    const { success } = runZhCheck('i18n-component')
+    assert.strictEqual(success, false)
+  })
+  it('配置后 key 属性不误报 → success=true', () => {
+    const { success, report } = runZhCheck('i18n-component', {
+      i18nComponents: [
+        { tag: 'i18n-t', keyProp: 'keypath' },
+        { tag: 'I18nText', keyProp: 'k' }
+      ]
+    })
+    assert.strictEqual(success, true)
+    assert.ok(report.includes('未发现硬编码中文'))
+  })
+})
+
 describe('zh-check: 含 void 元素的模板可解析', () => {
   it('success=false，报出 script 中的中文', () => {
     const { success, report } = runZhCheck('void-element')

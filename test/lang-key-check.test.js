@@ -34,3 +34,16 @@ describe('lang-key-check: 语言包目录不存在', () => {
     assert.strictEqual(result.success, false)
   })
 })
+
+describe('lang-key-check: i18n-t 组件 keypath 计为已使用 key', () => {
+  it('success=true，keypath 的 key 不出现在未使用列表', () => {
+    const root = fixturePath('i18n-t-key')
+    const outputDir = createOutputDir()
+    const result = langKeyCheck('src', { root, outputDir })
+    const report = fs.readFileSync(result.outputFile, 'utf-8')
+
+    assert.strictEqual(result.success, true)
+    assert.ok(report.includes('未发现国际化 Key 问题'), '报告应无问题')
+    assert.ok(!report.includes('未使用的 Key'), 'keypath 引用的 key 不应报未使用')
+  })
+})

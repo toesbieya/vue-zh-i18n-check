@@ -17,6 +17,17 @@ export interface I18nCheckConfig {
   ignoreFiles?: string[]
   /** 检测报告输出目录（相对项目根），默认 '.i18n-check' */
   outputDir?: string
+  /**
+   * 模板中携带翻译 key 的组件，默认 [{ tag: 'i18n-t', keyProp: 'keypath' }]
+   * key 属性值按翻译 key 处理：不算硬编码中文，且计入已使用 key
+   * 数组为整体覆盖，添加自定义组件时需保留默认项
+   */
+  i18nComponents?: Array<{
+    /** 组件标签名（匹配时忽略大小写与连字符，i18n-t / I18nT 等价） */
+    tag: string
+    /** 翻译 key 属性名 */
+    keyProp: string
+  }>
   /** 硬编码中文检测配置 */
   zh?: {
     /** 首个字符串参数视为已国际化的函数名，默认 ['$t', 't', '$pure', '$i18nKey'] */
