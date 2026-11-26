@@ -2,7 +2,8 @@
  * 国际化 key 完整性检测
  * 扫描语言包目录，比较各语言缺失的 json 文件和 key；
  * 扫描语言包中重复定义的顶层 key（同名 key 会静默覆盖，属于阻塞性问题）；
- * 扫描源码中的翻译函数调用（默认 $t / t，可通过 lang.tFns 配置），检查 key 是否存在于语言包总 key 集合中。
+ * 扫描源码中的翻译函数调用（默认 $t / t，可通过 lang.tFns 配置），检查 key 是否存在于语言包总 key 集合中；
+ * 校验语言包与源码中的 key 合法性（默认不允许特殊字符，可通过 lang.validateKey 自定义）。
  */
 
 import * as fs from 'node:fs'
@@ -141,12 +142,13 @@ function detectMissingKeys(languageData, allKeys, languages, missingFiles) {
  * 扫描源码中的翻译函数调用
  * @param {string[]} files 待扫描的源文件绝对路径列表
  * @param {Set<string>} allKeys 总 key 集合
- * @param {{ root: string, tFns: string[], ignoreFns: string[], i18nComponents: Array<{ tag: string, keyProp: string }> }} options 扫描配置
- * @returns {{ missingKeys: Array<{ file: string, line: number, key: string }>, dynamicCalls: Array<{ file: string, line: number, raw: string }>, usedKeys: Set<string>, scannedFiles: number }} 扫描结果
+ * @param {{ root: string, tFns: string[], ignoreFns: string[], i18nComponents: Array<{ tag: string, keyProp: string }>, validateKey: (segment: string) => boolean }} options 扫描配置
+ * @returns {{ missingKeys: Array<{ file: string, line: number, key: string }>, dynamicCalls: Array<{ file: string, line: number, raw: string }>, invalidKeys: Array<{ file: string, line: number, key: string }>, usedKeys: Set<string>, scannedFiles: number }} 扫描结果
  */
 function scanSourceFiles(files, allKeys, options) {
   const missingKeys = []
   const dynamicCalls = []
+  const invalidKeys = []
   const usedKeys = new Set()
 
   for (const file of files) {
@@ -163,6 +165,9 @@ function scanSourceFiles(files, allKeys, options) {
       if (call.firstArg.kind === 'empty') continue
       if (call.firstArg.kind === 'literal') {
         usedKeys.add(call.firstArg.value)
+        if (!isValidKey(call.firstArg.value, options.validateKey)) {
+          invalidKeys.push({ file: relFile, line: call.line, key: call.firstArg.value })
+        }
         if (allKeys.has(call.firstArg.value)) continue
         missingKeys.push({ file: relFile, line: call.line, key: call.firstArg.value })
         continue
@@ -171,7 +176,35 @@ function scanSourceFiles(files, allKeys, options) {
     }
   }
 
-  return { missingKeys, dynamicCalls, usedKeys, scannedFiles: files.length }
+  return { missingKeys, dynamicCalls, invalidKeys, usedKeys, scannedFiles: files.length }
+}
+
+/**
+ * 校验扁平化 key 的合法性（按点分段逐段校验）
+ * @param {string} key 扁平化 key
+ * @param {(segment: string) => boolean} validateKey 单段校验函数
+ * @returns {boolean} 是否合法
+ */
+function isValidKey(key, validateKey) {
+  return key.split('.').every(validateKey)
+}
+
+/**
+ * 检测各语言包中非法的 key
+ * @param {Record<string, { files: string[], keys: Set<string> }>} languageData 语言数据
+ * @param {string[]} languages 语言标识列表
+ * @param {(segment: string) => boolean} validateKey 单段校验函数
+ * @returns {Array<{ lang: string, key: string }>} 非法 key 列表
+ */
+function detectInvalidLangKeys(languageData, languages, validateKey) {
+  const invalid = []
+  for (const lang of languages) {
+    for (const key of languageData[lang].keys) {
+      if (isValidKey(key, validateKey)) continue
+      invalid.push({ lang, key })
+    }
+  }
+  return invalid.sort((a, b) => a.lang.localeCompare(b.lang) || a.key.localeCompare(b.key))
 }
 
 /**
@@ -191,10 +224,10 @@ function detectUnusedKeys(allKeys, usedKeys) {
 
 /**
  * 生成 Markdown 检测报告
- * @param {{ languages: string[], languageData: Record<string, { files: string[], keys: Set<string> }>, allKeys: Set<string>, missingFiles: Array<{ lang: string, file: string }>, missingKeys: Array<{ lang: string, key: string }>, duplicateKeys: Array<{ lang: string, file: string, key: string, lines: number[] }>, sourceResults: { missingKeys: Array<{ file: string, line: number, key: string }>, dynamicCalls: Array<{ file: string, line: number, raw: string }>, scannedFiles: number }, unusedKeys: string[] }} params 报告参数
+ * @param {{ languages: string[], languageData: Record<string, { files: string[], keys: Set<string> }>, allKeys: Set<string>, missingFiles: Array<{ lang: string, file: string }>, missingKeys: Array<{ lang: string, key: string }>, duplicateKeys: Array<{ lang: string, file: string, key: string, lines: number[] }>, invalidLangKeys: Array<{ lang: string, key: string }>, sourceResults: { missingKeys: Array<{ file: string, line: number, key: string }>, dynamicCalls: Array<{ file: string, line: number, raw: string }>, invalidKeys: Array<{ file: string, line: number, key: string }>, scannedFiles: number }, unusedKeys: string[] }} params 报告参数
  * @returns {string} Markdown 文本
  */
-function generateReport({ languages, languageData, allKeys, missingFiles, missingKeys, duplicateKeys, sourceResults, unusedKeys }) {
+function generateReport({ languages, languageData, allKeys, missingFiles, missingKeys, duplicateKeys, invalidLangKeys, sourceResults, unusedKeys }) {
   let md = '# 国际化 Key 检测报表\n\n'
 
   md += '## 语言包摘要\n\n'
@@ -235,6 +268,26 @@ function generateReport({ languages, languageData, allKeys, missingFiles, missin
     md += '\n'
   }
 
+  if (invalidLangKeys.length > 0) {
+    md += '## 语言包中非法的 Key\n\n'
+    md += '| 语言 | 非法 Key |\n'
+    md += '| --- | --- |\n'
+    for (const item of invalidLangKeys) {
+      md += `| ${item.lang} | ${item.key} |\n`
+    }
+    md += '\n'
+  }
+
+  if (sourceResults.invalidKeys.length > 0) {
+    md += '## 源码中非法的 Key\n\n'
+    md += '| 文件 | 行号 | 非法 Key |\n'
+    md += '| --- | --- | --- |\n'
+    for (const item of sourceResults.invalidKeys) {
+      md += `| ${item.file} | ${item.line} | ${item.key} |\n`
+    }
+    md += '\n'
+  }
+
   if (sourceResults.missingKeys.length > 0) {
     md += '## 源码中缺失的 Key\n\n'
     md += '| 文件 | 行号 | Key |\n'
@@ -265,7 +318,7 @@ function generateReport({ languages, languageData, allKeys, missingFiles, missin
     md += '\n'
   }
 
-  const hasAnyIssue = missingFiles.length > 0 || missingKeys.length > 0 || duplicateKeys.length > 0 || sourceResults.missingKeys.length > 0 || sourceResults.dynamicCalls.length > 0
+  const hasAnyIssue = missingFiles.length > 0 || missingKeys.length > 0 || duplicateKeys.length > 0 || invalidLangKeys.length > 0 || sourceResults.missingKeys.length > 0 || sourceResults.dynamicCalls.length > 0 || sourceResults.invalidKeys.length > 0
   if (!hasAnyIssue) {
     md += '未发现国际化 Key 问题。\n\n'
   }
@@ -317,14 +370,18 @@ export function langKeyCheck(scanTargets, options = {}) {
     }
   }
 
+  const validateKey = config.lang.validateKey || (() => true)
+
   const missingFiles = detectMissingFiles(languageData, langRoot, languages)
   const missingLangKeys = detectMissingKeys(languageData, allKeys, languages, missingFiles)
   const duplicateKeys = detectDuplicateKeys(langRoot, languages)
+  const invalidLangKeys = detectInvalidLangKeys(languageData, languages, validateKey)
   const sourceResults = scanSourceFiles(files, allKeys, {
     root: config.root,
     tFns: config.lang.tFns,
     ignoreFns: config.lang.ignoreFns,
-    i18nComponents: config.i18nComponents
+    i18nComponents: config.i18nComponents,
+    validateKey
   })
   const unusedKeys = detectUnusedKeys(allKeys, sourceResults.usedKeys)
 
@@ -335,6 +392,7 @@ export function langKeyCheck(scanTargets, options = {}) {
     missingFiles,
     missingKeys: missingLangKeys,
     duplicateKeys,
+    invalidLangKeys,
     sourceResults,
     unusedKeys
   })
@@ -342,7 +400,7 @@ export function langKeyCheck(scanTargets, options = {}) {
   fs.mkdirSync(path.dirname(outputFile), { recursive: true })
   fs.writeFileSync(outputFile, report, 'utf-8')
 
-  const hasBlockingIssues = missingFiles.length > 0 || missingLangKeys.length > 0 || duplicateKeys.length > 0 || sourceResults.missingKeys.length > 0
+  const hasBlockingIssues = missingFiles.length > 0 || missingLangKeys.length > 0 || duplicateKeys.length > 0 || invalidLangKeys.length > 0 || sourceResults.missingKeys.length > 0 || sourceResults.invalidKeys.length > 0
 
   console.log(`语言包: ${languages.join(', ')}`)
   console.log(`总key数: ${allKeys.size}`)
@@ -350,7 +408,9 @@ export function langKeyCheck(scanTargets, options = {}) {
   console.log(`缺失JSON文件: ${missingFiles.length} 处`)
   console.log(`语言包重复key: ${duplicateKeys.length} 处`)
   console.log(`语言包缺失key: ${missingLangKeys.length} 处`)
+  console.log(`语言包非法key: ${invalidLangKeys.length} 处`)
   console.log(`源码缺失key: ${sourceResults.missingKeys.length} 处`)
+  console.log(`源码非法key: ${sourceResults.invalidKeys.length} 处`)
   console.log(`无法静态检查: ${sourceResults.dynamicCalls.length} 处`)
   console.log(`语言包未使用key: ${unusedKeys.length} 处`)
   console.log(`报告已保存: ${outputFile}`)

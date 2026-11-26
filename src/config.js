@@ -3,6 +3,9 @@
  * 合并默认配置、配置文件（由 CLI 加载后传入）与调用方覆盖项。
  */
 
+/** 默认 key 合法性规则：仅允许中文、字母、数字（不允许标点、下划线、空格、换行、括号等特殊字符） */
+const DEFAULT_KEY_PATTERN = /^[一-龥a-zA-Z0-9]+$/
+
 /** 默认配置 */
 export const DEFAULT_CONFIG = {
   /** 项目根目录，默认当前工作目录 */
@@ -32,7 +35,12 @@ export const DEFAULT_CONFIG = {
     /** 翻译函数名 */
     tFns: ['$t', 't', '$i18nKey'],
     /** 需屏蔽首个字符串参数的函数名 */
-    ignoreFns: ['$pure']
+    ignoreFns: ['$pure'],
+    /**
+     * key 合法性校验（如 key 命名规范要求"不能包含特殊字符"），对扁平化 key 按点分段逐段调用，任一段返回 false 则该 key 非法
+     * 语言包中的 key 与源码中的字面量 key 都会校验，非法 key 属于阻塞性问题
+     */
+    validateKey: (segment) => DEFAULT_KEY_PATTERN.test(segment)
   }
 }
 

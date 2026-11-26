@@ -3,7 +3,7 @@
 Vue3 中文项目国际化检测工具，基于 AST（typescript + @vue/compiler-sfc）实现：
 
 - **zh-check**：扫描源码中的硬编码中文（含 `.vue` 模板文本）；
-- **lang-key-check**：语言包 key 完整性检测（各语言缺失文件 / 缺失 key、源码引用了不存在的 key、动态调用、未使用 key、语言包重复顶层 key）；
+- **lang-key-check**：语言包 key 完整性检测（各语言缺失文件 / 缺失 key、源码引用了不存在的 key、动态调用、未使用 key、语言包重复顶层 key、语言包与源码 key 合法性校验）；
 - **dup-key-check**：语言包 JSON 文件内重复顶层 key 检测（同名 key 会被 JSON.parse 静默覆盖）。
 
 检测未通过时退出码为 1，可直接挂在 git hook、lint-staged 与 CI 上作为门禁。
@@ -75,7 +75,11 @@ export default {
     // 翻译函数名
     tFns: ['$t', 't', '$i18nKey'],
     // 首个字符串参数视为已注册的函数名
-    ignoreFns: ['$pure']
+    ignoreFns: ['$pure'],
+    // key 合法性校验，默认仅允许中文、字母、数字（不允许标点、下划线、空格等特殊字符）；
+    // 对扁平化 key 按点分段逐段调用（如 views.system.lang.title 会依次传入 views、system、lang、title），
+    // 任一段返回 false 则该 key 非法；传 null 可关闭该校验
+    validateKey: (segment) => /^[一-龥a-zA-Z0-9]+$/.test(segment)
   }
 }
 ```
@@ -110,7 +114,7 @@ checkAll('src')                                                   // lang + zh�
 ## lang-key-check 说明
 
 - 语言包目录结构约定为 `<langRoot>/<语言标识>/**/*.json`，key 为「文件相对路径 + JSON 层级」的点分形式（如 `views/system/lang.json` 的 `title` 字段 → `views.system.lang.title`）；
-- 阻塞性问题（退出码 1）：语言间缺失 JSON 文件、语言间缺失 key、语言包重复顶层 key、源码引用了不存在的 key；
+- 阻塞性问题（退出码 1）：语言间缺失 JSON 文件、语言间缺失 key、语言包重复顶层 key、源码引用了不存在的 key、语言包或源码中存在非法 key（默认不允许特殊字符，可配置 lang.validateKey）；
 - 非阻塞项（仅列入报告）：动态翻译调用（无法静态检查）、语言包未使用 key；
 - `.json` / `.html` 文件不扫描翻译函数调用。
 

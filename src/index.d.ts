@@ -39,6 +39,12 @@ export interface I18nCheckConfig {
     tFns?: string[]
     /** 首个字符串参数视为已注册的函数名，默认 ['$pure'] */
     ignoreFns?: string[]
+    /**
+     * key 合法性校验，默认仅允许中文、字母、数字（不允许特殊字符）；
+     * 对扁平化 key 按点分段逐段调用（如 views.system.lang.title 会依次传入 views、system、lang、title），任一段返回 false 则该 key 非法
+     * 语言包中的 key 与源码中的字面量 key 都会校验，非法 key 属于阻塞性问题
+     */
+    validateKey?: (segment: string) => boolean
   }
 }
 
