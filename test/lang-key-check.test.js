@@ -49,7 +49,7 @@ describe('lang-key-check: i18n-t 组件 keypath 计为已使用 key', () => {
 })
 
 describe('lang-key-check: key 合法性校验', () => {
-  it('默认规则下语言包与源码中的特殊字符 key 均为阻塞性问题', () => {
+  it('默认规则下语言包中的特殊字符 key 为阻塞性问题', () => {
     const root = fixturePath('key-validate')
     const outputDir = createOutputDir()
     const result = langKeyCheck('src', { root, outputDir })
@@ -58,10 +58,12 @@ describe('lang-key-check: key 合法性校验', () => {
     assert.strictEqual(result.success, false)
     // 语言包中 zh-CN 与 en-US 各有一处 app.操作成功！
     assert.ok(report.includes('语言包中非法的 Key'), '报告应包含语言包非法 key 段落')
-    // 源码中 $t('app.操作成功！')
-    assert.ok(report.includes('源码中非法的 Key'), '报告应包含源码非法 key 段落')
+    // 源码中的 key 不重复校验合法性
+    assert.ok(!report.includes('源码中非法的 Key'), '报告不应包含源码非法 key 段落')
     // 合法 key 不应被误报
     assert.ok(!report.includes('| app.ok |'), '合法 key 不应出现在非法 key 表格')
+    // 文件名含中划线的命名空间段不参与校验，不应被误报
+    assert.ok(!report.includes('import-excel'), '文件名拼接出的命名空间段不应报非法')
   })
 
   it('自定义 validateKey 后不再报非法 key', () => {

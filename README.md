@@ -78,7 +78,8 @@ export default {
     ignoreFns: ['$pure'],
     // key 合法性校验，默认仅允许中文、字母、数字（不允许标点、下划线、空格等特殊字符）；
     // 对扁平化 key 按点分段逐段调用（如 views.system.lang.title 会依次传入 views、system、lang、title），
-    // 任一段返回 false 则该 key 非法；传 null 可关闭该校验
+    // 任一段返回 false 则该 key 非法；传 null 可关闭该校验；
+    // 由 json 文件路径拼接出的命名空间段不参与校验，只校验 JSON 内部的 key 段（文件名允许包含中划线等字符）
     validateKey: (segment) => /^[一-龥a-zA-Z0-9]+$/.test(segment)
   }
 }
@@ -114,7 +115,7 @@ checkAll('src')                                                   // lang + zh�
 ## lang-key-check 说明
 
 - 语言包目录结构约定为 `<langRoot>/<语言标识>/**/*.json`，key 为「文件相对路径 + JSON 层级」的点分形式（如 `views/system/lang.json` 的 `title` 字段 → `views.system.lang.title`）；
-- 阻塞性问题（退出码 1）：语言间缺失 JSON 文件、语言间缺失 key、语言包重复顶层 key、源码引用了不存在的 key、语言包或源码中存在非法 key（默认不允许特殊字符，可配置 lang.validateKey）；
+- 阻塞性问题（退出码 1）：语言间缺失 JSON 文件、语言间缺失 key、语言包重复顶层 key、源码引用了不存在的 key、语言包中存在非法 key（默认不允许特殊字符，可配置 lang.validateKey；源码中的 key 不重复校验）；
 - 非阻塞项（仅列入报告）：动态翻译调用（无法静态检查）、语言包未使用 key；
 - `.json` / `.html` 文件不扫描翻译函数调用。
 

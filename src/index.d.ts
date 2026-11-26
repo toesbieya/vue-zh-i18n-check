@@ -41,8 +41,9 @@ export interface I18nCheckConfig {
     ignoreFns?: string[]
     /**
      * key 合法性校验，默认仅允许中文、字母、数字（不允许特殊字符）；
-     * 对扁平化 key 按点分段逐段调用（如 views.system.lang.title 会依次传入 views、system、lang、title），任一段返回 false 则该 key 非法
-     * 语言包中的 key 与源码中的字面量 key 都会校验，非法 key 属于阻塞性问题
+     * 对扁平化 key 按点分段逐段调用（如 views.system.lang.title 会依次传入 views、system、lang、title），任一段返回 false 则该 key 非法；
+     * 由 json 文件路径拼接出的命名空间段不参与校验，只校验 JSON 内部的 key 段
+     * 仅校验语言包中的 key（源码中的 key 不重复校验），非法 key 属于阻塞性问题
      */
     validateKey?: (segment: string) => boolean
   }
